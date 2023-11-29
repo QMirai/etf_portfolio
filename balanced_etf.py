@@ -1,4 +1,4 @@
-import csv
+# import csv
 import time
 import pandas as pd
 import plotly.express as px
@@ -37,40 +37,23 @@ def table_downloader():
     driver.quit()
 
 
-def pretreatment_data(investment=5000):
+def pretreatment_data(file_path, investment=5000, start_date='2023-10-12'):
     """
     read the 'Fund History.csv',
-    then return three lists dates, navs and real values based on the investment.
+    then return a DataFrame of Date, NAV and real Value based on the investment.
     """
-    _dates = []
-    _navs = []
-    with open(file, 'r', encoding='utf-8') as csvfile:
-        data = csv.reader(csvfile)
-        next(data)
-        while True:
-            row = next(data)
-            if row[0] == '10/12/2023':
-                break
-            else:
-                _dates.append(row[0])
-                _navs.append(float(row[1]))
-    _dates.reverse()
-    _navs.reverse()
-    _values = [round(investment/12.9971 * i, 2) for i in _navs]
-    return _dates, _navs, _values
+    df = pd.read_csv(file_path)
+    df['Date'] = pd.to_datetime(df['Effective Date']).dt.strftime('%Y-%m-%d')
+    df = df.loc[df['Date'] >= start_date, ['Date', 'NAV']]
+    df = df.iloc[::-1].reset_index(drop=True)
+    df['Value'] = [round(investment/12.9971 * i) for i in df['NAV']]
+    return df
 
 
-def graph_drawer(_dates, _navs, _values):
+def graph_drawer(df):
     """
-    wrap three lists into pandas data frame, then feed it to the pylot for graph.
+    Feed the DataFrame to the pylot for graph.
     """
-    # DATA FRAME 包装
-    data_frame = {
-        'Date': _dates,
-        'Value': _values,
-        'NAV': _navs
-    }
-    df = pd.DataFrame(data_frame)
 
     fig = px.line(df, x='Date', y='NAV', title='Value Over Time', text='Value')
     fig.update_xaxes(title_text='Date')
@@ -95,8 +78,8 @@ file = os.path.join("C:\\Users\\small\\Downloads", 'Fund History.csv')
 if os.path.isfile(file):  # if there is a "Fund History.csv", remove it for the new one downloaded.
     os.remove(file)
 table_downloader()
-dates, navs, values = pretreatment_data()
-graph_drawer(dates, navs, values)
+dataframe = pretreatment_data(file)
+graph_drawer(dataframe)
 os.remove(file)
 
 
