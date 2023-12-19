@@ -1,4 +1,3 @@
-# import csv
 import time
 import pandas as pd
 import plotly.express as px
@@ -46,7 +45,7 @@ def pretreatment_data(file_path, investment=5000, start_date='2023-10-12'):
     df['Date'] = pd.to_datetime(df['Effective Date']).dt.strftime('%Y-%m-%d')
     df = df.loc[df['Date'] >= start_date, ['Date', 'NAV']]
     df = df.iloc[::-1].reset_index(drop=True)
-    df['Value'] = [round(investment/12.9971 * i) for i in df['NAV']]
+    df['Value'] = [round(investment/12.9971 * i, 2) for i in df['NAV']]
     return df
 
 
@@ -55,14 +54,14 @@ def graph_drawer(df):
     Feed the DataFrame to the pylot for graph.
     """
 
-    fig = px.line(df, x='Date', y='NAV', title='Value Over Time', text='Value')
+    fig = px.line(df, x='Date', y='Value', title='Value Over Time', hover_data={'NAV': ':.2f'})  # text='Value'
     fig.update_xaxes(title_text='Date')
     fig.update_yaxes(title_text='Value')
     fig.update_xaxes(type='category')
 
     # 在折线上显示标记
-    fig.update_traces(textposition="top center")
-    fig.update_traces(textfont=dict(size=16))
+    # fig.update_traces(textposition="top center")
+    # fig.update_traces(textfont=dict(size=16))
 
     # 旋转 X 轴上的日期标签
     fig.update_xaxes(tickangle=45)
@@ -75,7 +74,7 @@ def graph_drawer(df):
 
 
 file = os.path.join("C:\\Users\\small\\Downloads", 'Fund History.csv')
-if os.path.isfile(file):  # if there is a "Fund History.csv", remove it for the new one downloaded.
+if os.path.isfile(file):  # if there is a "Fund History.csv", remove it for the new one.
     os.remove(file)
 table_downloader()
 dataframe = pretreatment_data(file)
