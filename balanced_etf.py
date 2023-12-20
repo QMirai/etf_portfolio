@@ -36,7 +36,7 @@ def table_downloader():
     driver.quit()
 
 
-def pretreatment_data(file_path, investment=5000, start_date='2023-10-12'):
+def pretreatment_data(file_path, investment=5000, start_date='2023-10-13'):
     """
     read the 'Fund History.csv',
     then return a DataFrame of Date, NAV and real Value based on the investment.
