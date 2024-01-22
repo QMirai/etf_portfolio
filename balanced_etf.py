@@ -15,7 +15,7 @@ def table_downloader():
     # 使用WebDriverManager来获取Chrome WebDriver
     chrome_service = ChromeService(ChromeDriverManager().install())
     chrome_options = ChromeOptions()
-    chrome_options.add_argument("--headless=new")
+    # chrome_options.add_argument("--headless")
     chrome_options.add_argument("--mute-audio")
 
     # 创建一个 Chrome WebDriver 实例
@@ -41,11 +41,26 @@ def pretreatment_data(file_path, investment=5000, start_date='2023-10-13'):
     read the 'Fund History.csv',
     then return a DataFrame of Date, NAV and real Value based on the investment.
     """
+    def new_shares(current_shares, current_index):
+        return current_shares * df.loc[current_index-1, 'NAV'] / df.loc[current_index, 'RP']
+
+    initial_shares = investment / 12.9971
     df = pd.read_csv(file_path)
+    df['RP'] = pd.to_numeric(df['Reinvestment Price'], errors='coerce')
     df['Date'] = pd.to_datetime(df['Effective Date']).dt.strftime('%Y-%m-%d')
-    df = df.loc[df['Date'] >= start_date, ['Date', 'NAV']]
-    df = df.iloc[::-1].reset_index(drop=True)
-    df['Value'] = [round(investment/12.9971 * i, 2) for i in df['NAV']]
+    df['RP'] = pd.to_numeric(df['Reinvestment Price'], errors='coerce')
+    df = df.loc[df['Date'] >= start_date, ['Date', 'NAV', 'RP']]
+    df = df.sort_values(by='Date')
+    df = df.reset_index(drop=True)
+    df['shares'] = initial_shares
+    for index, row in df.iterrows():
+        if not pd.isna(row['RP']):
+            df.loc[index, 'shares'] = new_shares(initial_shares, index)
+            initial_shares = df.loc[index, 'shares']
+        else:
+            if index > 0:
+                df.loc[index, 'shares'] = df.loc[index - 1, 'shares']
+        df.loc[index, 'Value'] = round(df.loc[index, 'NAV'] * df.loc[index, 'shares'], 2)
     return df
 
 
@@ -74,7 +89,7 @@ def graph_drawer(df):
 
 
 file = os.path.join("C:\\Users\\small\\Downloads", 'Fund History.csv')
-if os.path.isfile(file):  # if there is a "Fund History.csv", remove it for the new one.
+if os.path.isfile(file):  # if there is a "Fund History.csv", remove it and wait for the new one.
     os.remove(file)
 table_downloader()
 dataframe = pretreatment_data(file)
