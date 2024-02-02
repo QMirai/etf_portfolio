@@ -15,7 +15,7 @@ def table_downloader():
     # 使用WebDriverManager来获取Chrome WebDriver
     chrome_service = ChromeService(ChromeDriverManager().install())
     chrome_options = ChromeOptions()
-    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--mute-audio")
 
     # 创建一个 Chrome WebDriver 实例
@@ -45,12 +45,12 @@ def pretreatment_data(file_path, investment=5000, start_date='2023-10-13'):
         return current_shares * df.loc[current_index - 1, 'NAV'].item() / df.loc[current_index, 'RP'].item()
 
     initial_shares = investment / 12.9971
-    # start_date = pd.to_datetime(start_date)
     df = pd.read_csv(file_path)
     df['RP'] = pd.to_numeric(df['Reinvestment Price'], errors='coerce')
     df['Date'] = pd.to_datetime(df['Effective Date']).dt.strftime('%Y-%m-%d')
-    # df.set_index('Date', inplace=True)
+    df.sort_values(by='Date', inplace=True)
     df = df.loc[df['Date'] >= start_date, ['Date', 'NAV', 'RP']]
+    df.reset_index(inplace=True)
     df = df.sort_values(by='Date')
     df['shares'] = initial_shares
     trade_day_index = df.index[df['RP'].notnull()]
@@ -60,7 +60,7 @@ def pretreatment_data(file_path, investment=5000, start_date='2023-10-13'):
     condition = df['RP'].isnull()
     df.loc[condition, 'shares'] = new_shares
     df['Value'] = round(df['NAV'] * df['shares'], 2)
-    return df.loc[:, ['Date', 'NAV', 'Value']]
+    return df  # .loc[:, ['Date', 'NAV', 'Value']]
 
 
 def graph_drawer(df):
@@ -92,7 +92,6 @@ if os.path.isfile(file):  # if there is a "Fund History.csv", remove it and wait
     os.remove(file)
 table_downloader()
 dataframe = pretreatment_data(file)
-# print(dataframe)
 graph_drawer(dataframe)
 os.remove(file)
 
