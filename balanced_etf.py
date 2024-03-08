@@ -2,6 +2,10 @@ import time
 import pandas as pd
 import plotly.express as px
 import os
+import webbrowser
+from pyecharts.charts import Line
+from pyecharts import options as opts
+from pyecharts.commons.utils import JsCode
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options as ChromeOptions
@@ -36,46 +40,96 @@ def table_downloader():
     driver.quit()
 
 
-def pretreatment_data(file_path, investment=5000, start_date='2023-10-13'):
+def pretreatment_data(file_path, start_date='2023-10-13'):
     """
-    read the 'Fund History.csv',
-    then return a DataFrame of Date, NAV and real Value based on the investment.
+    read the 'Fund History.csv', set Date as index, extract only the data after start_date,
+    convert RP from str to float, then return a DataFrame of Date, NAV and real Value based on the investment.
     """
-    def get_new_shares(current_shares, current_index):
-        return current_shares * df.loc[current_index - 1, 'NAV'].item() / df.loc[current_index, 'RP'].item()
+    start_date = pd.to_datetime(start_date).date()
+    df_ = pd.read_csv(file_path, index_col='Effective Date', parse_dates=True)
+    df_.index = df_.index.date
+    df_.sort_index(inplace=True)
+    df_['RP'] = pd.to_numeric(df_['Reinvestment Price'], errors='coerce')
+    df_ = df_.loc[df_.index >= start_date, ['NAV', 'RP']]
+    return df_
 
+
+def get_new_shares(df_, current_shares, trade_day):
+    """
+    Calculate new shares: new shares = current shares * previous day NAV / Reinvestment Price of trade day
+    """
+    previous_day = trade_day - pd.Timedelta(days=1)
+    return current_shares * df_.loc[previous_day, 'NAV'].item() / df_.loc[trade_day, 'RP'].item()
+
+
+def value_calcul(df_, investment=5000):
+    """
+    Calculate the value from the start date to the latest day.
+    """
     initial_shares = investment / 12.9971
-    df = pd.read_csv(file_path)
-    df['RP'] = pd.to_numeric(df['Reinvestment Price'], errors='coerce')
-    df['Date'] = pd.to_datetime(df['Effective Date']).dt.strftime('%Y-%m-%d')
-    df.sort_values(by='Date', inplace=True)
-    df = df.loc[df['Date'] >= start_date, ['Date', 'NAV', 'RP']]
-    df.reset_index(inplace=True)
-    df = df.sort_values(by='Date')
-    df['shares'] = initial_shares
-    trade_day_index = df.index[df['RP'].notnull()]
-    new_shares = get_new_shares(initial_shares, trade_day_index)
-    df['RP'] = df['RP'].bfill()
-    df.loc[trade_day_index, 'RP'] = float("NaN")
-    condition = df['RP'].isnull()
-    df.loc[condition, 'shares'] = new_shares
-    df['Value'] = round(df['NAV'] * df['shares'], 2)
-    return df  # .loc[:, ['Date', 'NAV', 'Value']]
+    df_['shares'] = initial_shares
+    trade_day_index = df_.index[df_['RP'].notnull()]
+    new_shares = get_new_shares(df_, initial_shares, trade_day_index)
+    df_['RP'] = df_['RP'].bfill()
+    df_.loc[trade_day_index, 'RP'] = float("NaN")
+    condition = df_['RP'].isnull()
+    df_.loc[condition, 'shares'] = new_shares
+    df_['Value'] = round(df_['NAV'] * df_['shares'], 2)
+    return df_
 
 
-def graph_drawer(df):
+def new_graph_drawer(df_):
+    """
+    Feed the DataFrame to the pyecharts for graph.
+    """
+    makepoint_data = [
+                           opts.MarkPointItem(coord=[df_.index.to_list()[-1], df_['Value'].to_list()[-1]],
+                                              value=df_['Value'].to_list()[-1],
+                                              symbol_size=80)
+                       ]
+    if df_['Value'].to_list()[-1] != float(df_['Value'].max()):
+        makepoint_data.append(opts.MarkPointItem(type_="max", name="max", symbol_size=80))
+
+    line = Line(init_opts=opts.InitOpts(width='1800px', height='900px'))
+    line.add_xaxis(df_.index.to_list())
+    line.add_yaxis('Value',
+                   df_['Value'].to_list(),
+                   label_opts=opts.LabelOpts(is_show=False),
+                   tooltip_opts=opts.TooltipOpts(trigger_on='mousemove|click', is_show=True,
+                                                 axis_pointer_type='cross',
+                                                 formatter=JsCode(
+                                                     """
+                                                     function(params) {
+                                                        var z = """ + str(df_['NAV'].to_list()) + """;
+                                                        var index = params.dataIndex;
+                                                        return 
+                                                            'Date: ' + params.data[0] + 
+                                                            '<br>Value: ' + params.data[1] + 
+                                                            '<br>NAV: ' + z[index]
+                                                     }
+                                                     """
+                                                 )),
+                   markpoint_opts=opts.MarkPointOpts(
+                       data=makepoint_data
+                   ),
+                   )
+    line.set_global_opts(
+        title_opts=opts.TitleOpts(title='Balanced ETF'),
+        tooltip_opts=opts.TooltipOpts(trigger="axis", axis_pointer_type='cross'),
+        yaxis_opts=opts.AxisOpts(min_=df_['Value'].min() // 100 * 100)
+    )
+    line.render()
+
+
+def graph_drawer(df_):
     """
     Feed the DataFrame to the pylot for graph.
     """
 
-    fig = px.line(df, x='Date', y='Value', title='Value Over Time', hover_data={'NAV': ':.2f'})  # text='Value'
+    fig = px.line(df_, x='Date', y='Value', title='Value Over Time', hover_data={'NAV': ':.2f'})  # text='Value'
     fig.update_xaxes(title_text='Date')
     fig.update_yaxes(title_text='Value')
     fig.update_xaxes(type='category')
-
-    # 在折线上显示标记
-    # fig.update_traces(textposition="top center")
-    # fig.update_traces(textfont=dict(size=16))
 
     # 旋转 X 轴上的日期标签
     fig.update_xaxes(tickangle=45)
@@ -87,22 +141,13 @@ def graph_drawer(df):
     fig.show()
 
 
-file = os.path.join("C:\\Users\\small\\Downloads", 'Fund History.csv')
-if os.path.isfile(file):  # if there is a "Fund History.csv", remove it and wait for the new one.
+if __name__ == "__main__":
+    file = os.path.join("C:\\Users\\small\\Downloads", 'Fund History.csv')
+    if os.path.isfile(file):  # if there is a "Fund History.csv", remove it and wait for the new one.
+        os.remove(file)
+    table_downloader()
+    df = value_calcul(pretreatment_data(file))
+    new_graph_drawer(df)
+    # graph_drawer(df)
+    webbrowser.open('render.html')
     os.remove(file)
-table_downloader()
-dataframe = pretreatment_data(file)
-graph_drawer(dataframe)
-os.remove(file)
-
-
-# plt.figure(figsize=(15, 6))
-# plt.plot(dates, navs, marker='o', linestyle='-')
-# plt.title('NAV Over Time')
-# plt.xlabel('Date')
-# plt.ylabel('NAV')
-# plt.grid(True)
-# plt.xticks(dates, rotation=45)
-# plt.tight_layout()
-
-# plt.show()
