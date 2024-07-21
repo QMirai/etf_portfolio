@@ -46,12 +46,12 @@ def pretreatment_data(file_path, start_date='2023-10-13'):
     convert RP from str to float, then return a DataFrame of Date, NAV and real Value based on the investment.
     """
     start_date = pd.to_datetime(start_date).date()
-    df_ = pd.read_csv(file_path, index_col='Effective Date', parse_dates=True)
-    df_.index = df_.index.date
-    df_.sort_index(inplace=True)
-    df_['RP'] = pd.to_numeric(df_['Reinvestment Price'], errors='coerce')
-    df_ = df_.loc[df_.index >= start_date, ['NAV', 'RP']]
-    return df_
+    df = pd.read_csv(file_path, index_col='Effective Date', parse_dates=True)
+    df.index = df.index.date
+    df.sort_index(inplace=True)
+    df['RP'] = pd.to_numeric(df['Reinvestment Price'], errors='coerce')
+    df = df.loc[df.index >= start_date, ['NAV', 'RP']]
+    return df
 
 
 def get_new_shares(df_, current_shares, trade_day):
@@ -62,20 +62,34 @@ def get_new_shares(df_, current_shares, trade_day):
     return current_shares * df_.loc[previous_day, 'NAV'].item() / df_.loc[trade_day, 'RP'].item()
 
 
-def value_calcul(df_, investment=5000):
+def value_calcul(df, investment=5000):
     """
     Calculate the value from the start date to the latest day.
     """
     initial_shares = investment / 12.9971
-    df_['shares'] = initial_shares
-    trade_day_index = df_.index[df_['RP'].notnull()]
-    new_shares = get_new_shares(df_, initial_shares, trade_day_index)
-    df_['RP'] = df_['RP'].bfill()
-    df_.loc[trade_day_index, 'RP'] = float("NaN")
-    condition = df_['RP'].isnull()
-    df_.loc[condition, 'shares'] = new_shares
-    df_['Value'] = round(df_['NAV'] * df_['shares'], 2)
-    return df_
+    df['shares'] = float('NaN')
+    df.loc[df.index[0], 'shares'] = initial_shares
+
+    # maybe many trade days during several years
+    trade_day_index_group = df.index[df['RP'].notnull()]
+
+    # one trade day, one new shares
+    cur_shares = initial_shares
+    new_shares_group = []
+    for tdi in trade_day_index_group:
+        new_shares_group.append(get_new_shares(df, cur_shares, tdi))
+        cur_shares = new_shares_group[-1]
+
+    # refill the new shares at the trade days
+    for day, shares in zip(trade_day_index_group, new_shares_group):
+        df.loc[day, 'shares'] = shares
+
+    # refill respectively the new shares to the days after trade days
+    df['shares'] = df['shares'].ffill()
+
+    # calculate the values
+    df['Value'] = round(df['NAV'] * df['shares'], 2)
+    return df
 
 
 def new_graph_drawer(df_):
