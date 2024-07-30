@@ -17,7 +17,10 @@ from selenium.webdriver.support import expected_conditions as ec
 
 def table_downloader():
     # 使用WebDriverManager来获取Chrome WebDriver
-    chrome_service = ChromeService(ChromeDriverManager().install())
+    chrome_install = ChromeDriverManager().install()
+    folder = os.path.dirname(chrome_install)
+    chromedriver_path = os.path.join(folder, "chromedriver.exe")
+    chrome_service = ChromeService(chromedriver_path)
     chrome_options = ChromeOptions()
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--mute-audio")
