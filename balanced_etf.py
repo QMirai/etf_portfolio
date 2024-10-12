@@ -9,31 +9,32 @@ from pyecharts.commons.utils import JsCode
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options as ChromeOptions
-from selenium.webdriver.chrome.service import Service as ChromeService
-from webdriver_manager.chrome import ChromeDriverManager
+# from selenium.webdriver.chrome.service import Service as ChromeService
+# from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
 
 
 def table_downloader():
     # 使用WebDriverManager来获取Chrome WebDriver
-    chrome_install = ChromeDriverManager().install()
-    folder = os.path.dirname(chrome_install)
-    chromedriver_path = os.path.join(folder, "chromedriver.exe")
-    chrome_service = ChromeService(chromedriver_path)
+    # chrome_install = ChromeDriverManager().install()
+    # folder = os.path.dirname(chrome_install)
+    # chromedriver_path = os.path.join(folder, "chromedriver.exe")
+    # chrome_service = ChromeService(chromedriver_path)
     chrome_options = ChromeOptions()
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--mute-audio")
 
     # 创建一个 Chrome WebDriver 实例
-    driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
+    # driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
+    driver = webdriver.Chrome(options=chrome_options)
 
     # 打开网页
     driver.get('https://bmomf.lipperweb.com/bmomf/profile/?symbol=45121:94792&lang=en#History')
     driver.set_window_size(800, 600)
     wait = WebDriverWait(driver, 10)
     button = wait.until(ec.presence_of_element_located((By.CSS_SELECTOR, 'button[data-timeperiod="1-4"]')))
-    button.click()
+    # button.click()
     # 使用ID查找链接元素
     link = driver.find_element(By.ID, 'lnkCsvExport')
     # 点击链接
@@ -43,14 +44,34 @@ def table_downloader():
     driver.quit()
 
 
-def pretreatment_data(file_path, start_date='2023-10-13'):
+def concat_data(database_path, file_path):
+    df_d = pd.read_csv(database_path)
+    df_f = pd.read_csv(file_path)
+    new_day = df_f.iloc[[0], :]
+    old_day = df_d.iloc[[0], :]
+
+    # determine if today's new data has been updated, comparing between new first line and database's first line
+    if new_day.iloc[0, 0] == old_day.iloc[0, 0]:
+        return df_d  # no update, return just the old data
+    else:
+        # with update, return the concatenated df and update my database
+        df = pd.concat([new_day, df_d])
+        df.to_csv(database_path, index=False)
+        return df
+
+
+def pretreatment_data(database_path, file_path, start_date='2023-10-13'):
     """
     read the 'Fund History.csv', set Date as index, extract only the data after start_date,
     convert RP from str to float, then return a DataFrame of Date, NAV and real Value based on the investment.
     """
+    df = concat_data(database_path, file_path)
     start_date = pd.to_datetime(start_date).date()
-    df = pd.read_csv(file_path, index_col='Effective Date', parse_dates=True)
-    df.index = df.index.date
+
+    df['Effective Date'] = pd.to_datetime(df['Effective Date'], format='%m/%d/%Y')
+    df.set_index('Effective Date', inplace=True)
+    df.index = df.index.date  # Extracts only the date part from each datetime object in the index, ignoring time
+
     df.sort_index(inplace=True)
     df['RP'] = pd.to_numeric(df['Reinvestment Price'], errors='coerce')
     df = df.loc[df.index >= start_date, ['NAV', 'RP']]
@@ -160,10 +181,11 @@ def graph_drawer(df_):
 
 if __name__ == "__main__":
     file = os.path.join("C:\\Users\\small\\Downloads", 'Fund History.csv')
+    database = 'D:\\cours\\python\\git\\etf_Portfolio\\data\\Fund History.csv'
     if os.path.isfile(file):  # if there is a "Fund History.csv", remove it and wait for the new one.
         os.remove(file)
     table_downloader()
-    df = value_calcul(pretreatment_data(file))
+    df = value_calcul(pretreatment_data(database, file))
     new_graph_drawer(df)
     # graph_drawer(df)
     webbrowser.open('render.html')
