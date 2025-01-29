@@ -47,17 +47,25 @@ def table_downloader():
 def concat_data(database_path, file_path):
     df_d = pd.read_csv(database_path)
     df_f = pd.read_csv(file_path)
-    new_day = df_f.iloc[[0], :]
-    old_day = df_d.iloc[[0], :]
+    # new_day = df_f.iloc[[0], :]
+    # old_day = df_d.iloc[[0], :]
 
-    # determine if today's new data has been updated, comparing between new first line and database's first line
-    if new_day.iloc[0, 0] == old_day.iloc[0, 0]:
-        return df_d  # no update, return just the old data
-    else:
-        # with update, return the concatenated df and update my database
-        df = pd.concat([new_day, df_d])
-        df.to_csv(database_path, index=False)
-        return df
+    df_d['Effective Date'] = pd.to_datetime(df_d['Effective Date'])
+    df_f['Effective Date'] = pd.to_datetime(df_f['Effective Date'])
+    target_date = df_d['Effective Date'].iloc[0]
+    df_to_concat = df_f[df_f['Effective Date'] > target_date]
+
+    df_updated = pd.concat([df_to_concat, df_d])
+    df_updated.to_csv(database_path, index=False)
+    return df_updated
+    # # determine if today's new data has been updated, comparing between new first line and database's first line
+    # if new_day.iloc[0, 0] == old_day.iloc[0, 0]:
+    #     return df_d  # no update, return just the old data
+    # else:
+    #     # with update, return the concatenated df and update my database
+    #     df = pd.concat([new_day, df_d])
+    #     df.to_csv(database_path, index=False)
+    #     return df
 
 
 def pretreatment_data(database_path, file_path, start_date='2023-10-13'):
@@ -82,7 +90,8 @@ def get_new_shares(df_, current_shares, trade_day):
     """
     Calculate new shares: new shares = current shares * previous day NAV / Reinvestment Price of trade day
     """
-    previous_day = trade_day - pd.Timedelta(days=1)
+    previous_days = df_.index[df_.index < trade_day]
+    previous_day = previous_days[-1]
     return current_shares * df_.loc[previous_day, 'NAV'].item() / df_.loc[trade_day, 'RP'].item()
 
 
